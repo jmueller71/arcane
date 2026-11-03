@@ -2,12 +2,18 @@ package oidc
 
 import (
 	"context"
+	"encoding/json/v2"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/libtnb/sqlite"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
+	"github.com/getarcaneapp/arcane/backend/v2/internal/auth"
 	"github.com/getarcaneapp/arcane/backend/v2/internal/config"
 	"github.com/getarcaneapp/arcane/backend/v2/internal/database"
 	"github.com/getarcaneapp/arcane/backend/v2/internal/settings"
@@ -96,6 +102,101 @@ func TestGetMobileRedirectAllowlistUsesSettings(t *testing.T) {
 		require.Error(t, validateMobileRedirectURIErr2,
 			"ValidateMobileRedirectURI config fallback should fail when DB setting is configured")
 	}
+}
+
+func TestGetProviderLogoutURL(t *testing.T) {
+	endSessionEndpoint := ""
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/.well-known/openid-configuration" {
+			http.NotFound(w, r)
+			return
+		}
+		metadata := map[string]any{
+			"issuer":                 server.URL,
+			"authorization_endpoint": server.URL + "/authorize",
+			"token_endpoint":         server.URL + "/token",
+			"jwks_uri":               server.URL + "/jwks",
+		}
+		if endSessionEndpoint != "" {
+			metadata["end_session_endpoint"] = endSessionEndpoint
+		}
+		assert.NoError(t, json.MarshalWrite(w, metadata))
+	}))
+	t.Cleanup(server.Close)
+
+	newService := func(t *testing.T, overrides map[string]string) *OidcService {
+		t.Helper()
+		ctx := t.Context()
+		settingsService, err := newSettingsServiceForTest(t, ctx, setupSettingsTestDB(t))
+		require.NoError(t, err)
+		values := map[string]string{
+			"oidcEnabled":        "true",
+			"oidcClientId":       "arcane-client",
+			"oidcIssuerUrl":      server.URL,
+			"oidcProviderLogout": "true",
+		}
+		for key, value := range overrides {
+			values[key] = value
+		}
+		for key, value := range values {
+			require.NoError(t, settingsService.UpdateSetting(ctx, key, value))
+		}
+		cfg := &config.Config{}
+		authService := auth.NewAuthService(nil, settingsService, nil, nil, nil, cfg)
+		return NewOidcService(authService, settingsService, cfg, server.Client(), nil)
+	}
+
+	t.Run("uses discovered end session endpoint", func(t *testing.T) {
+		endSessionEndpoint = server.URL + "/end-session/"
+		t.Cleanup(func() { endSessionEndpoint = "" })
+
+		got, err := newService(t, nil).GetProviderLogoutURL(t.Context(), "https://arcane.example")
+		require.NoError(t, err)
+
+		parsed, err := url.Parse(got)
+		require.NoError(t, err)
+		require.Equal(t, server.URL+"/end-session/", parsed.Scheme+"://"+parsed.Host+parsed.Path)
+		require.Equal(t, "arcane-client", parsed.Query().Get("client_id"))
+		require.Equal(t, "https://arcane.example/logged-out", parsed.Query().Get("post_logout_redirect_uri"))
+		require.Empty(t, parsed.Query().Get("id_token_hint"))
+	})
+
+	t.Run("manual endpoint takes precedence and keeps its query", func(t *testing.T) {
+		endSessionEndpoint = server.URL + "/end-session/"
+		t.Cleanup(func() { endSessionEndpoint = "" })
+
+		got, err := newService(t, map[string]string{
+			"oidcEndSessionEndpoint": "https://idp.example/logout?tenant=main",
+		}).GetProviderLogoutURL(t.Context(), "https://arcane.example")
+		require.NoError(t, err)
+
+		parsed, err := url.Parse(got)
+		require.NoError(t, err)
+		require.Equal(t, "idp.example", parsed.Host)
+		require.Equal(t, "/logout", parsed.Path)
+		require.Equal(t, "main", parsed.Query().Get("tenant"))
+		require.Equal(t, "arcane-client", parsed.Query().Get("client_id"))
+		require.Equal(t, "https://arcane.example/logged-out", parsed.Query().Get("post_logout_redirect_uri"))
+	})
+
+	t.Run("returns empty URL when provider logout is disabled", func(t *testing.T) {
+		got, err := newService(t, map[string]string{"oidcProviderLogout": "false"}).GetProviderLogoutURL(t.Context(), "https://arcane.example")
+		require.NoError(t, err)
+		require.Empty(t, got)
+	})
+
+	t.Run("returns empty URL when OIDC is disabled", func(t *testing.T) {
+		got, err := newService(t, map[string]string{"oidcEnabled": "false"}).GetProviderLogoutURL(t.Context(), "https://arcane.example")
+		require.NoError(t, err)
+		require.Empty(t, got)
+	})
+
+	t.Run("fails when provider does not advertise an end session endpoint", func(t *testing.T) {
+		got, err := newService(t, nil).GetProviderLogoutURL(t.Context(), "https://arcane.example")
+		require.Error(t, err)
+		require.Empty(t, got)
+	})
 }
 
 // Test fixtures shared by this package's tests.

@@ -39,6 +39,7 @@ import (
 	"github.com/getarcaneapp/arcane/backend/v2/pkg/utils"
 	"github.com/getarcaneapp/arcane/backend/v2/pkg/utils/cookie"
 	"github.com/getarcaneapp/arcane/backend/v2/pkg/utils/handlerutil"
+	"github.com/getarcaneapp/arcane/backend/v2/pkg/utils/httpx"
 	"github.com/getarcaneapp/arcane/backend/v2/pkg/utils/validation"
 )
 
@@ -46,6 +47,7 @@ type AuthHandler struct {
 	userService            *userdomain.UserService
 	authService            *AuthService
 	beginMFAAuthentication func(context.Context, string, auth.SessionMeta, string) (*auth.MFAChallenge, error)
+	providerLogoutURL      func(context.Context, string) (string, error)
 	settingsService        *settings.SettingsService
 }
 
@@ -60,6 +62,10 @@ type LoginOutput struct {
 }
 
 type LogoutInput struct {
+	Origin                string       `header:"Origin"`
+	XForwardedHost        string       `header:"X-Forwarded-Host"`
+	XForwardedProto       string       `header:"X-Forwarded-Proto"`
+	Host                  string       `header:"Host"`
 	SecureRefreshCookie   string       `cookie:"__Secure-refresh" doc:"Refresh cookie (HTTPS)"`
 	InsecureRefreshCookie string       `cookie:"refresh" doc:"Refresh cookie (HTTP)"`
 	Body                  *auth.Logout `required:"false"`
@@ -67,7 +73,7 @@ type LogoutInput struct {
 
 type LogoutOutput struct {
 	SetCookie []string `header:"Set-Cookie" doc:"Cleared session cookie"`
-	Body      base.ApiResponse[base.MessageResponse]
+	Body      base.ApiResponse[auth.LogoutResponse]
 }
 
 type RefreshTokenInput struct {
@@ -173,13 +179,28 @@ func (h *AuthHandler) Login(ctx context.Context, input *LoginInput) (*LoginOutpu
 
 // Logout clears the authentication session.
 func (h *AuthHandler) Logout(ctx context.Context, input *LogoutInput) (*LogoutOutput, error) {
+	providerLogoutURL := ""
 	if h.authService != nil {
-		if sessionID, exists := middleware.GetCurrentSessionIDFromContext(ctx); exists {
+		sessionID, hasSession := middleware.GetCurrentSessionIDFromContext(ctx)
+		refreshToken := cmp.Or(kit.FromPtr(input.Body).RefreshToken, input.SecureRefreshCookie, input.InsecureRefreshCookie)
+		if h.providerLogoutURL != nil && h.authService.IsOidcSession(ctx, sessionID, refreshToken) {
+			appURL := ""
+			if h.authService.config != nil {
+				appURL = h.authService.config.AppUrl
+			}
+			origin := httpx.GetClientBaseURL(input.Origin, input.XForwardedHost, input.XForwardedProto, input.Host, appURL)
+			logoutURL, err := h.providerLogoutURL(ctx, origin)
+			if err != nil {
+				slog.WarnContext(ctx, "Failed to build OIDC provider logout URL; signing out locally only", "error", err)
+			}
+			providerLogoutURL = logoutURL
+		}
+		if hasSession {
 			if err := h.authService.RevokeSession(ctx, sessionID); err != nil {
 				slog.ErrorContext(ctx, "Failed to revoke session on logout; clearing cookie anyway", "sessionId", sessionID, "error", err)
 			}
 		}
-		if refreshToken := cmp.Or(kit.FromPtr(input.Body).RefreshToken, input.SecureRefreshCookie, input.InsecureRefreshCookie); refreshToken != "" {
+		if refreshToken != "" {
 			if err := h.authService.RevokeSessionByRefreshToken(ctx, refreshToken); err != nil {
 				slog.WarnContext(ctx, "Failed to revoke refresh token session on logout", "error", err)
 			}
@@ -194,10 +215,11 @@ func (h *AuthHandler) Logout(ctx context.Context, input *LogoutInput) (*LogoutOu
 			cookie.BuildClearTokenCookieStringsFor(cookie.SecureCookieFromContext(ctx)),
 			cookie.BuildClearRefreshCookieStringsFor(cookie.SecureCookieFromContext(ctx))...,
 		),
-		Body: base.ApiResponse[base.MessageResponse]{
+		Body: base.ApiResponse[auth.LogoutResponse]{
 			Success: true,
-			Data: base.MessageResponse{
-				Message: "Logged out successfully",
+			Data: auth.LogoutResponse{
+				Message:           "Logged out successfully",
+				ProviderLogoutUrl: providerLogoutURL,
 			},
 		},
 	}, nil

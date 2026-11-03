@@ -997,3 +997,27 @@ func TestAuthenticateLocalPrimary_EmailFallback(t *testing.T) {
 		})
 	}
 }
+
+func TestIsOidcSession(t *testing.T) {
+	ctx := t.Context()
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.sessionService = session.NewSessionService(db)
+
+	_, err := userSvc.CreateUser(ctx, &user.User{ID: "u-logout", Username: "logout-user"})
+	require.NoError(t, err)
+
+	exp := time.Now().Add(5 * time.Minute)
+	oidcSession, oidcJTI, err := s.sessionService.CreateSession(ctx, "u-logout", exp, auth.SessionMeta{Source: session.UserSessionSourceOidc})
+	require.NoError(t, err)
+	localSession, _ := createTestSession(t, db, "u-logout", exp)
+	oidcRefreshToken := makeRefreshToken(t, s.signingKey, oidcJTI, exp, "u-logout", oidcSession.ID)
+
+	require.True(t, s.IsOidcSession(ctx, oidcSession.ID, ""))
+	require.True(t, s.IsOidcSession(ctx, "", oidcRefreshToken))
+	require.False(t, s.IsOidcSession(ctx, localSession.ID, ""))
+	require.False(t, s.IsOidcSession(ctx, "", "not-a-token"))
+	require.False(t, s.IsOidcSession(ctx, "", ""))
+}

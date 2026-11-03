@@ -19,6 +19,7 @@ type Module struct {
 	user                   *user.UserService
 	settings               *settings.SettingsService
 	beginMFAAuthentication func(context.Context, string, auth.SessionMeta, string) (*auth.MFAChallenge, error)
+	providerLogoutURL      func(context.Context, string) (string, error)
 }
 
 func New(
@@ -34,8 +35,15 @@ func New(
 		*auth.MFAChallenge,
 		error,
 	),
+	providerLogoutURL func(context.Context, string) (string, error),
 ) *Module {
-	return &Module{service: service, user: userService, settings: settingsService, beginMFAAuthentication: beginMFAAuthentication}
+	return &Module{
+		service:                service,
+		user:                   userService,
+		settings:               settingsService,
+		beginMFAAuthentication: beginMFAAuthentication,
+		providerLogoutURL:      providerLogoutURL,
+	}
 }
 
 func (m *Module) Service() *AuthService {
@@ -47,10 +55,10 @@ func (m *Module) Service() *AuthService {
 
 func (m *Module) RegisterRoutes(api huma.API) {
 	if m == nil {
-		RegisterAuth(api, nil, nil, nil, nil)
+		RegisterAuth(api, nil, nil, nil, nil, nil)
 		return
 	}
-	RegisterAuth(api, m.user, m.service, m.settings, m.beginMFAAuthentication)
+	RegisterAuth(api, m.user, m.service, m.settings, m.beginMFAAuthentication, m.providerLogoutURL)
 }
 
 // RegisterAuth registers authentication routes using Huma.
@@ -68,11 +76,13 @@ func RegisterAuth(
 		*auth.MFAChallenge,
 		error,
 	),
+	providerLogoutURL func(context.Context, string) (string, error),
 ) {
 	h := &AuthHandler{
 		userService:            userService,
 		authService:            authService,
 		beginMFAAuthentication: beginMFAAuthentication,
+		providerLogoutURL:      providerLogoutURL,
 		settingsService:        settingsService,
 	}
 
@@ -91,7 +101,7 @@ func RegisterAuth(
 		Method:      http.MethodPost,
 		Path:        "/auth/logout",
 		Summary:     "Logout",
-		Description: "Clear authentication session",
+		Description: "Clear authentication session and return the OIDC provider logout URL when provider logout applies",
 		Tags:        []string{"Auth"},
 		Security:    []map[string][]string{},
 	}, h.Logout)

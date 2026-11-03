@@ -459,6 +459,16 @@ type Update struct {
 	// Required: false
 	OidcAutoRedirectToProvider *string `json:"oidcAutoRedirectToProvider,omitzero"`
 
+	// OidcProviderLogout indicates if signing out also ends the session at the OIDC provider.
+	//
+	// Required: false
+	OidcProviderLogout *string `json:"oidcProviderLogout,omitzero"`
+
+	// OidcEndSessionEndpoint overrides the discovered OIDC end session endpoint.
+	//
+	// Required: false
+	OidcEndSessionEndpoint *string `json:"oidcEndSessionEndpoint,omitzero"`
+
 	// OidcProviderName is the custom display name for the OIDC provider.
 	//
 	// Required: false

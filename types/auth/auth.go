@@ -21,6 +21,12 @@ type Logout struct {
 	RefreshToken string `json:"refreshToken,omitempty" doc:"Refresh token whose session is revoked even when the access token has expired"`
 }
 
+// LogoutResponse represents the logout response body.
+type LogoutResponse struct {
+	Message           string `json:"message" doc:"Response message"`
+	ProviderLogoutUrl string `json:"providerLogoutUrl,omitempty" doc:"OIDC provider end session URL the client should navigate to, when provider logout is enabled"`
+}
+
 // PasswordChange represents the password change request body.
 type PasswordChange struct {
 	CurrentPassword string `json:"currentPassword,omitempty" doc:"Current password of the user (required for non-OIDC users)"`

@@ -213,9 +213,11 @@ func (s *AuthService) GetOidcConfig(ctx context.Context) (*settings.OidcConfig, 
 		UserinfoEndpoint:            appSettings.OidcUserinfoEndpoint.Value,
 		JwksURI:                     appSettings.OidcJwksEndpoint.Value,
 		DeviceAuthorizationEndpoint: appSettings.OidcDeviceAuthorizationEndpoint.Value,
+		EndSessionEndpoint:          appSettings.OidcEndSessionEndpoint.Value,
 		Scopes:                      appSettings.OidcScopes.Value,
 		GroupsClaim:                 appSettings.OidcGroupsClaim.Value,
 		SkipTlsVerify:               appSettings.OidcSkipTlsVerify.IsTrue(),
+		ProviderLogout:              appSettings.OidcProviderLogout.IsTrue(),
 	}, nil
 }
 
@@ -924,6 +926,24 @@ func (s *AuthService) RevokeSessionByRefreshToken(ctx context.Context, refreshTo
 		return err
 	}
 	return s.RevokeSession(ctx, claims.SessionID)
+}
+
+// IsOidcSession reports whether the session identified by sessionID, or else
+// by refreshToken, was created by an OIDC login.
+func (s *AuthService) IsOidcSession(ctx context.Context, sessionID, refreshToken string) bool {
+	if s.sessionService == nil {
+		return false
+	}
+	if sessionID == "" && refreshToken != "" {
+		if claims, err := s.parseAnyRefreshToken(ctx, refreshToken); err == nil {
+			sessionID = claims.SessionID
+		}
+	}
+	if sessionID == "" {
+		return false
+	}
+	userSession, err := s.sessionService.GetSessionByID(ctx, sessionID)
+	return err == nil && userSession.Source == session.UserSessionSourceOidc
 }
 
 // LogoutAllOtherSessions revokes every active session for userID except

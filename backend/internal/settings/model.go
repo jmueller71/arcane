@@ -167,10 +167,12 @@ type Settings struct {
 	OidcUserinfoEndpoint                  SettingVariable `key:"oidcUserinfoEndpoint,envOverride" meta:"label=OIDC Userinfo Endpoint;type=text;keywords=oidc,userinfo,endpoint,oauth,openid;category=authentication;description=Override OIDC userinfo endpoint"`
 	OidcJwksEndpoint                      SettingVariable `key:"oidcJwksEndpoint,envOverride" meta:"label=OIDC JWKS Endpoint;type=text;keywords=oidc,jwks,keys,endpoint,oauth,openid;category=authentication;description=Override OIDC JWKS endpoint"`
 	OidcDeviceAuthorizationEndpoint       SettingVariable `key:"oidcDeviceAuthorizationEndpoint,envOverride" meta:"label=OIDC Device Authorization Endpoint;type=text;keywords=oidc,device,authorization,endpoint,oauth,openid,cli;category=authentication;description=Override OIDC device authorization endpoint for CLI authentication"`
+	OidcEndSessionEndpoint                SettingVariable `key:"oidcEndSessionEndpoint,envOverride" meta:"label=OIDC End Session Endpoint;type=text;keywords=oidc,end,session,logout,signout,endpoint,openid;category=authentication;description=Override OIDC end session endpoint used for provider logout"`
 	OidcScopes                            SettingVariable `key:"oidcScopes,authrequired,envOverride" meta:"label=OIDC Scopes;type=text;keywords=oidc,scopes,oauth,openid,permissions;category=authentication;description=OIDC scopes to request"`
 	OidcGroupsClaim                       SettingVariable `key:"oidcGroupsClaim,authrequired,envOverride" meta:"label=OIDC Groups Claim;type=text;keywords=oidc,groups,claim,role,mapping,rbac;category=authentication;description=Claim name to read group memberships from for role mapping (default: groups)"`
 	OidcSkipTlsVerify                     SettingVariable `key:"oidcSkipTlsVerify,authrequired,envOverride" meta:"label=OIDC Skip TLS Verify;type=boolean;keywords=oidc,tls,verify,skip,insecure;category=authentication;description=Skip TLS verification for OIDC provider"`
 	OidcAutoRedirectToProvider            SettingVariable `key:"oidcAutoRedirectToProvider,public,envOverride" meta:"label=OIDC Auto Redirect;type=boolean;keywords=oidc,auto,redirect,automatic,login,provider,sso;category=authentication;description=Automatically redirect to OIDC provider on login page"`
+	OidcProviderLogout                    SettingVariable `key:"oidcProviderLogout,authrequired,envOverride" meta:"label=OIDC Provider Logout;type=boolean;keywords=oidc,logout,signout,end,session,provider,sso;category=authentication;description=Also sign out of the OIDC provider when signing out of Arcane"`
 	OidcMergeAccounts                     SettingVariable `key:"oidcMergeAccounts,authrequired,envOverride" meta:"label=OIDC Account Merging;type=boolean;keywords=oidc,merge,link,accounts,email,match,existing,users,combine;category=authentication;description=Allow OIDC logins to merge with existing accounts by email"`
 	OidcProviderName                      SettingVariable `key:"oidcProviderName,public,envOverride" meta:"label=OIDC Provider Name;type=text;keywords=oidc,provider,name,display,label,sso;category=authentication;description=Custom name for the OIDC provider (e.g., Authentik, Keycloak)"`
 	OidcProviderLogoUrl                   SettingVariable `key:"oidcProviderLogoUrl,public,envOverride" meta:"label=OIDC Provider Logo URL;type=text;keywords=oidc,provider,logo,url,image,icon,sso;category=authentication;description=Custom logo URL for the OIDC provider"`
@@ -381,11 +383,13 @@ type OidcConfig struct {
 	UserinfoEndpoint            string `json:"userinfoEndpoint,omitempty"`
 	JwksURI                     string `json:"jwksUri,omitempty"`
 	DeviceAuthorizationEndpoint string `json:"deviceAuthorizationEndpoint,omitempty"`
+	EndSessionEndpoint          string `json:"endSessionEndpoint,omitempty"`
 
 	// GroupsClaim is the claim path Arcane reads group memberships from on
 	// every OIDC login. Matched against oidc_role_mappings to produce role
 	// assignments. Default: "groups".
 	GroupsClaim string `json:"groupsClaim,omitempty"`
 
-	SkipTlsVerify bool `json:"skipTlsVerify"`
+	SkipTlsVerify  bool `json:"skipTlsVerify"`
+	ProviderLogout bool `json:"providerLogout"`
 }

@@ -231,8 +231,14 @@ var ServiceOptions = fx.Options(
 				localEnvironment.QueueRemoteSync(ctx, "registries", localEnvironment.SyncRegistriesToRemoteEnvironments)
 			})
 		},
-		func(service *auth.AuthService, userService *user.UserService, settingsService *settings.SettingsService, passkeyService *passkey.PasskeyService) *auth.Module {
-			return auth.New(service, userService, settingsService, passkeyService.BeginMFAAuthentication)
+		func(
+			service *auth.AuthService,
+			userService *user.UserService,
+			settingsService *settings.SettingsService,
+			passkeyService *passkey.PasskeyService,
+			oidcService *oidc.OidcService,
+		) *auth.Module {
+			return auth.New(service, userService, settingsService, passkeyService.BeginMFAAuthentication, oidcService.GetProviderLogoutURL)
 		},
 		func(service *user.UserService, localAuth *auth.AuthService, settingsService *settings.SettingsService) *user.Module {
 			return user.New(service, localAuth.InvalidateUserTokenCache, settingsService)

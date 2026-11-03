@@ -238,11 +238,64 @@ func (s *OidcService) GenerateAuthURL(ctx context.Context, redirectTo, origin, m
 }
 
 func (s *OidcService) GetOidcRedirectURL(origin string) string {
-	baseUrl := origin
-	if baseUrl == "" {
-		baseUrl = strings.TrimSuffix(s.config.GetAppURL(), "/")
+	return s.baseURL(origin) + "/auth/oidc/callback"
+}
+
+// GetPostLogoutRedirectURL returns where the provider sends the browser after provider logout.
+func (s *OidcService) GetPostLogoutRedirectURL(origin string) string {
+	return s.baseURL(origin) + "/logged-out"
+}
+
+func (s *OidcService) baseURL(origin string) string {
+	if origin != "" {
+		return origin
 	}
-	return baseUrl + "/auth/oidc/callback"
+	return strings.TrimSuffix(s.config.GetAppURL(), "/")
+}
+
+// GetProviderLogoutURL builds the RP-initiated logout URL, or returns "" when provider logout is disabled.
+func (s *OidcService) GetProviderLogoutURL(ctx context.Context, origin string) (string, error) {
+	cfg, err := s.effectiveConfig(ctx)
+	if errors.Is(err, auth.ErrOidcAuthDisabled) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if !cfg.ProviderLogout {
+		return "", nil
+	}
+
+	endpoint := cfg.EndSessionEndpoint
+	if endpoint == "" {
+		if hasManualEndpoints(cfg) {
+			return "", errors.New("end session endpoint must be configured when using manual OIDC endpoints")
+		}
+		provider, discoverErr := s.getOrDiscoverProvider(ctx, cfg)
+		if discoverErr != nil {
+			return "", fmt.Errorf("failed to discover provider: %w", discoverErr)
+		}
+		var claims struct {
+			EndSessionEndpoint string `json:"end_session_endpoint"`
+		}
+		if claimsErr := provider.Claims(&claims); claimsErr != nil {
+			return "", fmt.Errorf("failed to get end session endpoint from provider: %w", claimsErr)
+		}
+		if claims.EndSessionEndpoint == "" {
+			return "", errors.New("end session endpoint not found in provider configuration")
+		}
+		endpoint = claims.EndSessionEndpoint
+	}
+
+	logoutURL, err := url.Parse(endpoint)
+	if err != nil || logoutURL.Scheme == "" || logoutURL.Host == "" {
+		return "", fmt.Errorf("invalid end session endpoint %q", endpoint)
+	}
+	query := logoutURL.Query()
+	query.Set("client_id", cfg.ClientID)
+	query.Set("post_logout_redirect_uri", s.GetPostLogoutRedirectURL(origin))
+	logoutURL.RawQuery = query.Encode()
+	return logoutURL.String(), nil
 }
 
 func (s *OidcService) getOrDiscoverProvider(ctx context.Context, cfg *settings.OidcConfig) (*oidc.Provider, error) {
