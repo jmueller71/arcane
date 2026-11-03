@@ -81,7 +81,7 @@ const PROTECTED_PREFIXES = [
 	'/updates'
 ];
 
-const UNAUTHENTICATED_ONLY_PREFIXES = ['/login', '/oidc/login', '/img', '/favicon.ico'];
+const UNAUTHENTICATED_ONLY_PREFIXES = ['/login', '/logged-out', '/oidc/login', '/img', '/favicon.ico'];
 const AUTH_CALLBACK_PREFIXES = ['/oidc/callback', '/auth/oidc/callback'];
 
 function isUserGlobalAdmin(user: User): boolean {

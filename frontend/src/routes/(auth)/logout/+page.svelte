@@ -12,7 +12,11 @@
 
 	// Runs on page entry only, so preloading the logout link never signs anyone out.
 	onMount(async () => {
-		const revoked = await authService.logout(queryClient);
+		const { revoked, providerLogoutUrl } = await authService.logout(queryClient);
+		if (providerLogoutUrl) {
+			window.location.replace(providerLogoutUrl);
+			return;
+		}
 		await goto('/login', { replaceState: true });
 		if (!revoked) toast.error(m.auth_logout_revocation_unconfirmed());
 	});

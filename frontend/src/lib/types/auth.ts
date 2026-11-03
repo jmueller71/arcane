@@ -280,6 +280,16 @@ export type StepUpGrant = {
 	expiresAt: string;
 };
 
+export type LogoutResponse = {
+	message: string;
+	providerLogoutUrl?: string;
+};
+
+export type LogoutResult = {
+	revoked: boolean;
+	providerLogoutUrl: string | null;
+};
+
 export interface AutoLoginConfig {
 	enabled: boolean;
 	username: string;

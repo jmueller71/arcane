@@ -126,6 +126,8 @@
 			oidcMergeAccounts: z.boolean(),
 			oidcSkipTlsVerify: z.boolean(),
 			oidcAutoRedirectToProvider: z.boolean(),
+			oidcProviderLogout: z.boolean(),
+			oidcEndSessionEndpoint: z.string(),
 			oidcClientId: z.string(),
 			oidcClientSecret: z.string(),
 			oidcClearClientSecret: z.boolean(),
@@ -168,6 +170,8 @@
 			oidcMergeAccounts: source.oidcMergeAccounts,
 			oidcSkipTlsVerify: source.oidcSkipTlsVerify,
 			oidcAutoRedirectToProvider: source.oidcAutoRedirectToProvider,
+			oidcProviderLogout: source.oidcProviderLogout,
+			oidcEndSessionEndpoint: source.oidcEndSessionEndpoint,
 			oidcClientId: source.oidcClientId,
 			oidcClientSecret: '',
 			oidcClearClientSecret: false,
@@ -200,6 +204,7 @@
 	);
 
 	const redirectUri = $derived(`${globalThis?.location?.origin ?? ''}/auth/oidc/callback`);
+	const postLogoutRedirectUri = $derived(`${globalThis?.location?.origin ?? ''}/logged-out`);
 	const isOidcEnvForced = $derived(data.oidcStatus.envForced);
 	const isOidcForcedEnabled = $derived(isOidcEnvForced && currentSettings.oidcEnabled);
 	const isOidcForcedDisabled = $derived(isOidcEnvForced && !currentSettings.oidcEnabled);
@@ -488,6 +493,50 @@
 										bind:checked={formInputs.oidcAutoRedirectToProvider.value}
 									/>
 								</SettingsRow>
+								<SettingsRow
+									for="oidcProviderLogoutSwitch"
+									label={m.oidc_provider_logout_label()}
+									description={m.oidc_provider_logout_description()}
+									layout="switch"
+								>
+									<Switch
+										id="oidcProviderLogoutSwitch"
+										disabled={isOidcEnvForced}
+										bind:checked={formInputs.oidcProviderLogout.value}
+									/>
+								</SettingsRow>
+								{#if formInputs.oidcProviderLogout.value}
+									<SettingsRow
+										for="oidcEndSessionEndpoint"
+										label={m.oidc_end_session_endpoint_label()}
+										description={m.oidc_end_session_endpoint_description()}
+										error={formInputs.oidcEndSessionEndpoint.error}
+									>
+										<Input
+											id="oidcEndSessionEndpoint"
+											placeholder={m.oidc_end_session_endpoint_placeholder()}
+											disabled={isOidcEnvForced}
+											bind:value={formInputs.oidcEndSessionEndpoint.value}
+											aria-invalid={!!formInputs.oidcEndSessionEndpoint.error}
+										/>
+									</SettingsRow>
+									<SettingsRow
+										label={m.oidc_post_logout_redirect_uri_title()}
+										description={m.oidc_post_logout_redirect_uri_description()}
+										layout="wide"
+									>
+										<div class="flex items-center gap-2">
+											<code class="flex-1 rounded-md bg-muted/60 p-2 font-mono text-xs break-all">{postLogoutRedirectUri}</code>
+											<CopyButton
+												text={postLogoutRedirectUri}
+												size="sm"
+												variant="outline"
+												class="shrink-0"
+												title={m.common_copy()}
+											/>
+										</div>
+									</SettingsRow>
+								{/if}
 								<SettingsRow label={m.oidc_redirect_uri_title()} description={m.oidc_redirect_uri_description()} layout="wide">
 									<div class="flex items-center gap-2">
 										<code class="flex-1 rounded-md bg-muted/60 p-2 font-mono text-xs break-all">{redirectUri}</code>

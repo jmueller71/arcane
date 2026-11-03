@@ -9,7 +9,7 @@ import { featureStore } from '#lib/stores/features.store.svelte.js';
 import userStore from '#lib/stores/user-store.svelte.js';
 import { versionStore } from '#lib/stores/version.store.svelte.js';
 import type { User, MFAChallenge, AuthenticationResponse } from '#lib/types/auth.js';
-import type { LoginCredentials, AutoLoginConfig } from '#lib/types/auth.js';
+import type { LoginCredentials, AutoLoginConfig, LogoutResponse, LogoutResult } from '#lib/types/auth.js';
 import type { OidcStatusInfo } from '#lib/types/settings.js';
 import { parseInstant } from '#lib/utils/formatting.js';
 import { getEffectiveLandingPage } from '#lib/utils/navigation.js';
@@ -37,7 +37,7 @@ class AuthService extends BaseAPIService {
 	private isRefreshing = false;
 	private refreshGeneration = 0;
 	private refreshSubscribers: Array<(token: string | null, error?: Error) => void> = [];
-	private logoutRequest: Promise<boolean> | null = null;
+	private logoutRequest: Promise<LogoutResult> | null = null;
 
 	constructor() {
 		super();
@@ -298,8 +298,8 @@ class AuthService extends BaseAPIService {
 		}
 	}
 
-	/** Ends the local session, then revokes the server session. Resolves false when revocation is unconfirmed. */
-	logout(queryClient: QueryClient): Promise<boolean> {
+	/** Ends the local session, then revokes the server session. Reports whether revocation was confirmed and any provider logout URL. */
+	logout(queryClient: QueryClient): Promise<LogoutResult> {
 		// Reuse the pending request only while it still belongs to the current session.
 		if (this.logoutRequest && currentSessionSignal().aborted) return this.logoutRequest;
 
@@ -311,9 +311,12 @@ class AuthService extends BaseAPIService {
 		this.refreshGeneration++;
 		this.resetAuthenticatedState(queryClient);
 
-		const request: Promise<boolean> = tryCatch(this.api.post('/auth/logout', undefined, { timeout: 10_000 })).then((result) => {
+		const request: Promise<LogoutResult> = tryCatch(
+			this.handleResponse<LogoutResponse>(this.api.post('/auth/logout', undefined, { timeout: 10_000 }))
+		).then((result) => {
 			if (this.logoutRequest === request) this.logoutRequest = null;
-			return result.error === null;
+			if (result.error !== null) return { revoked: false, providerLogoutUrl: null };
+			return { revoked: true, providerLogoutUrl: result.data.providerLogoutUrl || null };
 		});
 		this.logoutRequest = request;
 		return request;
